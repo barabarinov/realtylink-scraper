@@ -1,4 +1,3 @@
-import pprint
 import time
 
 from selenium import webdriver
@@ -99,14 +98,6 @@ class ApartmentsScraper:
 
     def _get_photo_urls_array(self) -> list[str] | None:
         try:
-            # photo_selector = "button.btn.btn-primary.photo-btn"
-            # self._wait_for_element_and_click(By.CSS_SELECTOR, photo_selector, timeout=4)
-            #
-            # button = self.driver.find_element(
-            #     By.CSS_SELECTOR,
-            #     photo_selector,
-            # )
-            # self.driver.execute_script("arguments[0].click();", button)
             self.driver.find_element(
                 By.CSS_SELECTOR, "div.primary-photo-container > a"
             ).click()
@@ -153,15 +144,8 @@ class ApartmentsScraper:
     def scrape(self) -> list[dict[str, str]]:
         self.driver.maximize_window()
         self.driver.get(self.base_url)
-        time.sleep(5)
+        time.sleep(3)
 
         apartments_links = self._extract_apartment_links()
 
-        apartments_list = []
-
-        for apartment_link in apartments_links:
-            apartments_list.append(self.scrape_apartment(apartment_link))
-            pprint.pprint(apartments_list)
-
-        print("✅ Scraped successfully")
-        return apartments_list
+        return [self.scrape_apartment(apartment_link) for apartment_link in apartments_links]
