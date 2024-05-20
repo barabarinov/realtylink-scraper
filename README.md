@@ -28,3 +28,8 @@ pip install -r requirements.txt
 ```shell
 python main.py
 ```
+
+### For custom output filename use flag `--output`
+```shell
+python main.py --output custom_name.json
+```
