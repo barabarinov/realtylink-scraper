@@ -7,7 +7,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from app.utils import handle_no_such_element_exception
+from app.utils import handle_exception
 
 BASE_URL = "https://realtylink.org/en/properties~for-rent"
 MAX_APARTMENTS = 60
@@ -38,7 +38,7 @@ class ApartmentsScraper:
             return data
         return ", ".join(data.split(", ")[-2:])
 
-    @handle_no_such_element_exception(value="No description")
+    @handle_exception(default_value="No description")
     def _get_description(self) -> str:
         return self.driver.find_element(
             By.CSS_SELECTOR, 'div[itemprop="description"]'
@@ -57,7 +57,7 @@ class ApartmentsScraper:
             .split(" ")[0]
         )
 
-    @handle_no_such_element_exception(value=0)
+    @handle_exception(default_value=0)
     def _get_bedrooms_amount(self) -> int:
         return int(
             self.driver.find_element(By.CSS_SELECTOR, "div.row.teaser > div.cac")
@@ -65,7 +65,7 @@ class ApartmentsScraper:
             .split(" ")[0] or 0
         )
 
-    @handle_no_such_element_exception(value=0)
+    @handle_exception(default_value=0)
     def _get_bathrooms_amount(self) -> int:
         return int(
             self.driver.find_element(By.CSS_SELECTOR, "div.row.teaser > div.sdb")
