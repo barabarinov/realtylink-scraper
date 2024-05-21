@@ -4,7 +4,6 @@ from selenium import webdriver
 from selenium.common import TimeoutException
 from selenium.webdriver import ActionChains, Keys
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -125,7 +124,7 @@ class ApartmentsScraper:
                 By.CSS_SELECTOR, photo_count_selector
             ).text
 
-            total_photo_count = int(photo_count_text.split("/")[1])  # TODO
+            total_photo_count = int(photo_count_text.split("/")[1])
 
             photo_urls = []
             action_chain = ActionChains(self.driver)
