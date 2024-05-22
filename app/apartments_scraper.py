@@ -1,10 +1,9 @@
 from dataclasses import dataclass
 
 from selenium import webdriver
-from selenium.common import TimeoutException
+from selenium.common import TimeoutException, NoSuchElementException
 from selenium.webdriver import ActionChains, Keys
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -34,11 +33,35 @@ class ApartmentsScraper:
     def scrape(self) -> list[Apartment]:
         self.driver.maximize_window()
         self.driver.get(self.base_url)
-        self._wait_for_element_download(By.CSS_SELECTOR, "div.wrapper.even.wrapper-results")
+        self._wait_for_element_download(By.CSS_SELECTOR, "div.wrapper.even.wrapper-results", timeout=10)
 
         apartments_links = self._extract_apartment_links()
 
         return [self.scrape_apartment(apartment_link) for apartment_link in apartments_links]
+
+    def _extract_apartment_links(self) -> list[str]:
+        apartments_data = []
+
+        while True:
+            link_selector = "a.property-thumbnail-summary-link"
+            self._wait_for_element_download(By.CSS_SELECTOR, link_selector, timeout=10)
+
+            apartments = self.driver.find_elements(By.CSS_SELECTOR, link_selector)
+            for apartment in apartments:
+                apartments_data.append(apartment.get_attribute("href"))
+                if len(apartments_data) == self.max_apartments:
+                    return apartments_data
+            try:
+                next_button_li = self.driver.find_element(By.CSS_SELECTOR, "li.next")
+                next_button_classes = next_button_li.get_attribute("class").split()
+                if "inactive" in next_button_classes:
+                    break
+                next_button_li.find_element(By.TAG_NAME, "a").click()
+                self._wait_for_element_download(By.CSS_SELECTOR, link_selector, timeout=3)
+            except NoSuchElementException:
+                break
+
+        return apartments_data
 
     def scrape_apartment(self, apartment_link: str) -> Apartment:
         self.driver.get(apartment_link)
@@ -125,7 +148,7 @@ class ApartmentsScraper:
                 By.CSS_SELECTOR, photo_count_selector
             ).text
 
-            total_photo_count = int(photo_count_text.split("/")[1])  # TODO
+            total_photo_count = int(photo_count_text.split("/")[1])
 
             photo_urls = []
             action_chain = ActionChains(self.driver)
@@ -140,18 +163,3 @@ class ApartmentsScraper:
             return photo_urls
         except TimeoutException:
             return None
-
-    def _extract_apartment_links(self) -> list[str]:
-        apartments_data = []
-
-        while True:
-            link_selector = "a.property-thumbnail-summary-link"
-            self._wait_for_element_download(By.CSS_SELECTOR, link_selector)
-
-            apartments = self.driver.find_elements(By.CSS_SELECTOR, link_selector)
-            for apartment in apartments:
-                apartments_data.append(apartment.get_attribute("href"))
-                if len(apartments_data) == self.max_apartments:
-                    return apartments_data
-
-            self.driver.find_element(By.CSS_SELECTOR, "li.next > a").click()
