@@ -111,6 +111,9 @@ class ApartmentsScraper:
         element_text = self._get_element(
             By.CSS_SELECTOR, "div.price.text-right > span:nth-child(6)"
         )
+        if " " not in element_text:
+            logging.error(f"Invalid price text format: {element_text}")
+            raise ValueError(f"Invalid price text format: {element_text}")
         try:
             return int(element_text.split(" ")[0].lstrip("$").replace(",", ""))
         except ValueError:
