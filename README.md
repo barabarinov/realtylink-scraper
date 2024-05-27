@@ -31,5 +31,5 @@ python main.py
 
 ### For custom output filename use flag `--output`
 ```shell
-python main.py --output custom_name.json
+python main.py --output custom_name
 ```
