@@ -8,11 +8,22 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from app.utils import handle_exception
+from app.utils import handle_exceptions
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+
+PAGE_DOWNLOAD_TIMEOUT = 10
+ELEMENT_DOWNLOAD_TIMEOUT = 3
+
+
+class ConversionError(ValueError):
+    pass
+
+
+class InvalidFormatError(ValueError):
+    pass
 
 
 @dataclass
@@ -30,6 +41,7 @@ class Apartment:
 
 
 class ApartmentsScraper:
+
     def __init__(self, base_url, max_apartments: int = 60) -> None:
         self.driver = webdriver.Chrome()
         self.base_url = base_url
@@ -38,7 +50,9 @@ class ApartmentsScraper:
     def scrape(self) -> list[Apartment]:
         self.driver.maximize_window()
         self.driver.get(self.base_url)
-        self._wait_for_element_download(By.CSS_SELECTOR, "a.property-thumbnail-summary-link", timeout=10)
+        self._wait_for_element_download(
+            By.CSS_SELECTOR, "a.property-thumbnail-summary-link", PAGE_DOWNLOAD_TIMEOUT
+        )
         apartments_links = self._extract_apartment_links()
 
         return [self.scrape_apartment(apartment_link) for apartment_link in apartments_links]
@@ -48,7 +62,7 @@ class ApartmentsScraper:
 
         while True:
             link_selector = "a.property-thumbnail-summary-link"
-            self._wait_for_element_download(By.CSS_SELECTOR, link_selector, timeout=10)
+            self._wait_for_element_download(By.CSS_SELECTOR, link_selector, PAGE_DOWNLOAD_TIMEOUT)
 
             apartments = self.driver.find_elements(By.CSS_SELECTOR, link_selector)
 
@@ -81,7 +95,7 @@ class ApartmentsScraper:
             description=self._get_description(),
             datetime="Today",
             price=self._get_price(),
-            rooms=self._get_bedrooms_amount() + self._get_bathrooms_amount(),
+            rooms=self._get_rooms_amount(),
             floor_area=self._get_floor_area(),
             image_array=self._get_photo_urls_array(),
         )
@@ -91,73 +105,76 @@ class ApartmentsScraper:
             by, selector
         ).text.strip()
 
-    def _get_title(self) -> str:
+    @handle_exceptions(-1, NoSuchElementException)
+    def _get_title(self) -> str | int:
         return self._get_element(
             By.CSS_SELECTOR, "h1[itemprop='category'] > span[data-id='PageTitle']"
         )
 
-    def _get_region(self, address: bool = False) -> str:
+    @handle_exceptions(-1, NoSuchElementException)
+    def _get_region(self, address: bool = False) -> str | int:
         data = self._get_element(By.CSS_SELECTOR, "h2[itemprop='address']")
         if address:
             return data
+        if ", " not in data and len(data.split(", ")[-2:]) != 2:
+            raise InvalidFormatError(f"Invalid region text format: {data}")
         return ", ".join(data.split(", ")[-2:])
 
-    @handle_exception(default_value="No description")
+    @handle_exceptions(-1, NoSuchElementException)
     def _get_description(self) -> str:
         return self._get_element(By.CSS_SELECTOR, 'div[itemprop="description"]')
 
-    @handle_exception(default_value=0)
-    def _get_price(self) -> float:
+    @handle_exceptions(
+        -1,
+        InvalidFormatError,
+        ConversionError,
+        NoSuchElementException,
+    )
+    def _get_price(self) -> int:
         element_text = self._get_element(
             By.CSS_SELECTOR, "div.price.text-right > span:nth-child(6)"
         )
-        if " " not in element_text:
-            logging.error(f"Invalid price text format: {element_text}")
-            raise ValueError(f"Invalid price text format: {element_text}")
+        if " " and "$" not in element_text:
+            raise InvalidFormatError(f"Invalid price text format: {element_text}")
         try:
             return int(element_text.split(" ")[0].lstrip("$").replace(",", ""))
         except ValueError:
-            logging.error(f"Cannot convert price to integer: {element_text}")
+            raise ConversionError(f"Cannot convert price to integer: {element_text}")
 
-    @handle_exception(default_value=0)
+    @handle_exceptions(
+        -1,
+        InvalidFormatError,
+        ConversionError,
+        NoSuchElementException,
+    )
     def _get_floor_area(self) -> int:
         element_text = self._get_element(
             By.CSS_SELECTOR, "div.carac-value > span"
         )
         if " " not in element_text:
-            logging.error(f"Invalid floor area text format: {element_text}")
-            raise ValueError(f"Invalid floor area text format: {element_text}")
+            raise InvalidFormatError(f"Invalid floor area text format: {element_text}")
         try:
             return int(element_text.split(" ")[0].replace(",", ""))
         except ValueError:
-            logging.error(f"Cannot convert floor area to integer: {element_text}")
+            raise ConversionError(f"Cannot convert floor area to integer: {element_text}")
 
-    @handle_exception(default_value=0)
-    def _get_bedrooms_amount(self) -> int:
-        element_text = self._get_element(By.CSS_SELECTOR, "div.row.teaser > div.cac")
+    def _get_rooms_amount(self) -> int:
+        bedrooms = self._get_room_count("div.row.teaser > div.cac", "bedroom")
+        bathrooms = self._get_room_count("div.row.teaser > div.sdb", "bathroom")
+        return bedrooms + bathrooms
+
+    @handle_exceptions(0, InvalidFormatError, ConversionError, NoSuchElementException)
+    def _get_room_count(self, selector: str, room_type: str) -> int:
+        element_text = self._get_element(By.CSS_SELECTOR, selector)
         if " " not in element_text:
-            logging.error(f"Invalid bedroom amount text format: {element_text}")
-            raise ValueError(f"Invalid bedroom amount text format: {element_text}")
+            raise InvalidFormatError(f"Invalid {room_type} amount text format: {element_text}")
         try:
             return int(element_text.split(" ")[0])
         except ValueError:
-            logging.error(f"Cannot convert bedrooms amount to integer: {element_text}")
-            return 0
-
-    @handle_exception(default_value=0)
-    def _get_bathrooms_amount(self) -> int:
-        element_text = self._get_element(By.CSS_SELECTOR, "div.row.teaser > div.sdb")
-        if " " not in element_text:
-            logging.error(f"Invalid bathroom amount text format: {element_text}")
-            raise ValueError(f"Invalid bathroom amount text format: {element_text}")
-        try:
-            return int(element_text.split(" ")[0])
-        except ValueError:
-            logging.error(f"Cannot convert bathrooms amount to integer: {element_text}")
-            return 0
+            raise ConversionError(f"Cannot convert {room_type} amount to integer: {element_text}")
 
     def _wait_for_element_download(
-        self, by: str, selector: str, timeout: int = 3
+        self, by: str, selector: str, timeout: int = ELEMENT_DOWNLOAD_TIMEOUT
     ) -> None:
         WebDriverWait(self.driver, timeout).until(
             EC.visibility_of_element_located((by, selector))
