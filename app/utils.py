@@ -1,19 +1,22 @@
+import logging
 from functools import wraps
 
-from selenium.common.exceptions import NoSuchElementException
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 
 
-def handle_exception(
+def handle_exceptions(
     default_value: str | int,
-    exception: Exception = NoSuchElementException,
+    *exceptions,
 ) -> callable:
     def deco(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except exception as e:
-                print(f"Element not found:({e})")
+            except exceptions as e:
+                logging.error(f"Exception occurred in {func.__name__}: {e}")
                 return default_value
 
         return wrapper
